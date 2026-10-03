@@ -77,6 +77,18 @@ dialog .ic{padding:0 18px;background:var(--acc);color:#fff;font-weight:700}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 @keyframes in{from{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+dialog input[type=checkbox],dialog input[type=radio]{width:auto}
+dialog .row{gap:8px}
+.cta{width:100%;font:inherit;font-weight:700;background:var(--acc);color:#fff;border:0;border-radius:14px;min-height:48px;margin-bottom:12px;cursor:pointer;box-shadow:var(--sh)}
+.gh{font:inherit;font-weight:600;border:0;background:none;color:var(--mut);padding:0 16px;cursor:pointer}
+.seg{display:flex;gap:4px;background:var(--seg);padding:4px;border-radius:14px;margin-top:12px}
+.seg label{flex:1;margin:0!important;position:relative}
+.seg input{position:absolute;opacity:0}
+.seg span{display:block;text-align:center;padding:10px 4px;border-radius:11px;font-weight:600;color:var(--mut);cursor:pointer}
+.seg input:checked+span{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+.seg input:focus-visible+span{outline:3px solid var(--acc)}
+.sw{display:flex!important;align-items:center;gap:10px;color:var(--ink)!important;font-size:1rem!important;margin-top:14px!important}
+.hint{font-size:.8rem;color:var(--mut);margin-top:10px;min-height:1.2em}
 </style>
 </head>
 <body>
@@ -93,6 +105,7 @@ dialog .ic{padding:0 18px;background:var(--acc);color:#fff;font-weight:700}
   </header>
     <section id="v-fin" hidden>
     <select id="mes" aria-label="Mês"></select>
+    <button class="cta" id="nl">＋ Novo lançamento</button>
     <div class="tiles" id="tiles"></div>
     <div id="blocos"></div>
   </section>
@@ -115,6 +128,24 @@ dialog .ic{padding:0 18px;background:var(--acc);color:#fff;font-weight:700}
   <button id="n-compras" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H6"/></svg>Compras</button>
   <button id="n-fin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Financeiro</button>
 </nav>
+
+<dialog id="lf">
+  <form id="lff">
+    <strong id="lft">Novo lançamento</strong>
+    <div class="seg" role="radiogroup" aria-label="Conta">
+      <label><input type="radio" name="conta" value="Santander" checked><span>Santander</span></label>
+      <label><input type="radio" name="conta" value="NuBank"><span>NuBank</span></label>
+      <label><input type="radio" name="conta" value="Caixa"><span>Caixa</span></label>
+    </div>
+    <label for="lfd">Descrição</label><input id="lfd" maxlength="80" required>
+    <label for="lfv">Valor (R$)</label><input id="lfv" inputmode="decimal" placeholder="0,00" required>
+    <div id="lfcx" hidden><label for="lfk">Tipo</label><select id="lfk" style="margin:0"><option value="s">Saída (−)</option><option value="e">Entrada (+)</option></select></div>
+    <div id="lfc"><label for="lfp">Parcelas</label><input id="lfp" type="number" min="1" max="60" value="1"><label class="sw"><input type="checkbox" id="lfm"> Parcial Mamis</label></div>
+    <label for="lfdt">Data</label><input id="lfdt" type="date">
+    <div class="hint" id="lfh"></div>
+    <div class="row"><button type="button" class="gh" id="lfcancel">Cancelar</button><button class="ic">Lançar</button></div>
+  </form>
+</dialog>
 
 <dialog id="dlg">
   <form method="dialog" id="cfgf">
@@ -283,6 +314,34 @@ function renderFin(j) {
 }
 $('#mes').onchange = e => { mesSel = e.target.value; loadFin(); };
 $('#n-compras').onclick = () => setView('compras'); $('#n-fin').onclick = () => setView('fin');
+
+const conta = () => document.querySelector('input[name=conta]:checked').value;
+function formSync() {
+  const cx = conta() === 'Caixa'; $('#lfcx').hidden = !cx; $('#lfc').hidden = cx;
+  const v = Math.abs(num($('#lfv').value)), n = Math.max(1, parseInt($('#lfp').value) || 1);
+  $('#lfh').textContent = cx || n < 2 || !v ? '' : n + 'x de ' + brl(v / n) + ' · lança também nos ' + (n - 1) + ' meses seguintes';
+}
+document.querySelectorAll('#lff input,#lff select').forEach(e => e.addEventListener('input', formSync));
+$('#nl').onclick = () => {
+  $('#lff').reset(); $('#lfdt').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  $('#lft').textContent = 'Novo lançamento · ' + mesSel; formSync(); $('#lf').showModal();
+};
+$('#lfcancel').onclick = () => $('#lf').close();
+$('#lff').onsubmit = async ev => {
+  ev.preventDefault();
+  const cx = conta() === 'Caixa'; let v = num($('#lfv').value);
+  if (!v) return status('Informe um valor válido', true);
+  if (cx) v = ($('#lfk').value === 's' || v < 0) ? -Math.abs(v) : Math.abs(v);
+  else if (v < 0) return status('Cartão não aceita valor negativo', true);
+  const p = { acao: 'lancarfin', mes: mesSel, conta: conta(), desc: $('#lfd').value.trim(), valor: v, parcelas: cx ? 1 : (parseInt($('#lfp').value) || 1), mamis: !cx && $('#lfm').checked, data: $('#lfdt').value };
+  $('#lf').close(); status('Lançando…');
+  try {
+    const j = await (await fetch(URL_, { method: 'POST', body: JSON.stringify({ ...p, token: TOK }) })).json();
+    if (!j.ok) throw new Error(j.error || 'falha');
+    status('Lançado em ' + j.lancados.length + ' mês(es)' + (j.faltando.length ? ' · sem aba para: ' + j.faltando.join(', ') : ''));
+    lastFin = ''; loadFin();
+  } catch (e) { status('Não lançou: ' + e.message, true); }
+};
 
 function openCfg() { $('#u').value = URL_; $('#k').value = TOK; $('#dlg').showModal(); }
 $('#cfgf').onsubmit = () => { URL_ = $('#u').value.trim(); TOK = $('#k').value.trim(); put('lc_url', URL_); put('lc_tok', TOK); setTimeout(load, 0); };
