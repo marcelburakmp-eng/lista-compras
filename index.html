@@ -219,7 +219,7 @@ async function loadFin() {
 function renderFin(j) {
   const sel = $('#mes'); sel.replaceChildren(...j.meses.map(m => { const o = el('option', '', m); o.value = m; o.selected = m === j.mes; return o; }));
   $('#tiles').replaceChildren(...Object.entries(j.resumo).map(([k, v]) => { const t = el('div', 'tile'); t.append(el('small', '', k), el('b', num(v) < 0 ? 'neg' : '', v || '—')); return t; }));
-  $('#blocos').replaceChildren(...j.blocos.map(b => {
+  $('#blocos').replaceChildren(...j.blocos.filter(b => !/^inter$/i.test(b.nome.trim())).map(b => {
     const d = document.createElement('details'), sm = el('summary'), vals = b.itens.map(i => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra)));
     sm.append(el('span', '', b.nome + ' (' + b.itens.length + ')'), el('span', '', brl(vals.reduce((a, x) => a + x, 0))));
     d.append(sm);
