@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lista de compras</title>
+<style>
+:root{--bg:#f2f6f4;--card:#fff;--ink:#17302f;--mut:#617574;--line:#d6e0dc;--acc:#0e7c86;--crit:#c8394d;--ok:#3b8c5a;--r:14px}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1c1c;--card:#172928;--ink:#e6f1ef;--mut:#92aaa7;--line:#294240;--acc:#4cc3cd;--crit:#ff7488;--ok:#6fd195}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Figtree","Segoe UI",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+h1{font-size:1.5rem;margin:0}
+.sub{color:var(--mut);font-size:.9rem;margin-top:2px}
+.sub.err{color:var(--crit)}
+.ic{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;min-width:44px;height:44px;font-size:1.1rem;cursor:pointer}
+.prog{margin:18px 0 6px;height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+.cnt{font-size:.95rem;color:var(--mut)}
+.cnt b{color:var(--ink);font-size:1.15rem}
+.tabs{display:flex;gap:8px;margin:18px 0 10px}
+.tabs button,.chips button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 14px;border-radius:999px;cursor:pointer;min-height:44px}
+.tabs button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.chips button{min-height:38px;padding:6px 12px;font-size:.88rem}
+.chips button.on{border-color:var(--acc);color:var(--acc);font-weight:600}
+ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+li{flex-wrap:wrap;display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+li.done .nm{text-decoration:line-through;color:var(--mut)}
+li input[type=checkbox]{width:26px;height:26px;accent-color:var(--ok);flex:none;cursor:pointer}
+.nm{flex:1;min-width:120px}
+.nm small{display:block;font-size:.8rem;color:var(--mut)}
+.nm small.crit{color:var(--crit);font-weight:600}
+.step{display:flex;align-items:center;gap:2px}
+.step button{width:40px;height:40px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;font-size:1.2rem;cursor:pointer}
+.step .go{width:auto;padding:0 12px;margin-left:6px;font-size:.9rem;background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.step span{min-width:30px;text-align:center;font-weight:600}
+form.add{display:flex;gap:8px;margin-top:14px}
+form.add input{flex:1;min-width:0;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);min-height:44px}
+form.add button{font:inherit;background:var(--acc);color:#fff;border:0;border-radius:10px;padding:0 16px;min-height:44px;cursor:pointer}
+.empty{text-align:center;color:var(--mut);padding:28px 0}
+dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--card);color:var(--ink);max-width:420px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog label{display:block;margin:12px 0 4px;font-size:.9rem;color:var(--mut)}
+dialog input{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Lista de compras</h1>
+      <div class="sub" id="st">Conectando…</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="ic" id="rf" title="Atualizar agora" aria-label="Atualizar agora">↻</button>
+      <button class="ic" id="cf" title="Configurar conexão" aria-label="Configurar conexão">⚙</button>
+    </div>
+  </header>
+  <div class="prog"><i id="bar"></i></div>
+  <div class="cnt" id="cnt"></div>
+  <div class="tabs" role="tablist">
+    <button id="t-basicos" class="on">Básicos</button>
+    <button id="t-esp">Esporádicos</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <ul id="list"></ul>
+  <form class="add" id="addf" hidden>
+    <input id="addn" placeholder="Novo item esporádico" maxlength="80" required>
+    <button>Adicionar</button>
+  </form>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="cfgf">
+    <strong>Conexão com a planilha</strong>
+    <label for="u">URL do app da Web (termina em /exec)</label>
+    <input id="u" type="url" required>
+    <label for="k">Código de acesso (TOKEN do script)</label>
+    <input id="k" type="password" required>
+    <div class="row"><button class="ic" style="padding:0 16px" value="ok">Salvar</button></div>
+  </form>
+</dialog>
+
+<script>
+const get = k => { try { return localStorage.getItem(k) || '' } catch (e) { return '' } };
+const put = (k, v) => { try { localStorage.setItem(k, v) } catch (e) {} };
+const $ = s => document.querySelector(s);
+let URL_ = get('lc_url'), TOK = get('lc_tok'), data = { basicos: [], esp: [] };
+let tab = 'basicos', filtro = 'todos', pend = 0;
+
+function status(t, err) { const s = $('#st'); s.textContent = t; s.className = 'sub' + (err ? ' err' : ''); }
+function el(t, c, x) { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+const crit = i => /cr[ií]tico/i.test(i.situacao || '');
+
+async function load() {
+  if (!URL_ || !TOK) return openCfg();
+  if (pend) return;
+  try {
+    const r = await fetch(URL_ + '?token=' + encodeURIComponent(TOK));
+    const j = await r.json();
+    if (j.error) throw new Error(j.error === 'token' ? 'código de acesso incorreto' : j.error);
+    data = j; render();
+    status('Sincronizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+  } catch (e) { status('Sem conexão com a planilha: ' + e.message, true); }
+}
+
+async function send(p) {
+  pend++;
+  try {
+    const r = await fetch(URL_, { method: 'POST', body: JSON.stringify({ ...p, token: TOK }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'falha');
+    status('Salvo na planilha');
+  } catch (e) { status('Não salvou: ' + e.message, true); pend--; return load(); }
+  pend--;
+  if (p.acao === 'add' || p.acao === 'lancar') load();
+}
+
+function setF(item, key, campo, valor) {
+  item[key] = valor; render();
+  send({ acao: 'set', campo, row: item.row, valor });
+}
+
+function stepper(item, key, campo, min) {
+  const w = el('div', 'step');
+  const m = el('button', '', '−'), p = el('button', '', '+');
+  m.setAttribute('aria-label', 'Diminuir'); p.setAttribute('aria-label', 'Aumentar');
+  const n = el('span', '', item[key] === '' ? 0 : item[key]);
+  m.onclick = () => setF(item, key, campo, Math.max(min, (Number(item[key]) || 0) - 1));
+  p.onclick = () => setF(item, key, campo, (Number(item[key]) || 0) + 1);
+  w.append(m, n, p); return w;
+}
+
+function launcher(i) {
+  i.q = i.q || 1;
+  const w = el('div', 'step'), m = el('button', '', '−'), p = el('button', '', '+');
+  const n = el('span', '', i.q), ok = el('button', 'go', 'Lançar');
+  m.setAttribute('aria-label', 'Diminuir'); p.setAttribute('aria-label', 'Aumentar');
+  ok.title = 'Lança a entrada na aba Controle Residencial';
+  m.onclick = () => { i.q = Math.max(1, i.q - 1); n.textContent = i.q; };
+  p.onclick = () => { i.q++; n.textContent = i.q; };
+  ok.onclick = () => { status('Lançando entrada…'); send({ acao: 'lancar', nome: i.nome, qtd: i.q }); i.q = 1; n.textContent = 1; };
+  w.append(m, n, p, ok); return w;
+}
+
+function render() {
+  const bas = tab === 'basicos', items = bas ? data.basicos : data.esp;
+  const feitos = items.filter(i => i.comprado).length;
+  $('#bar').style.width = items.length ? (feitos / items.length * 100) + '%' : '0';
+  const falta = items.length - feitos;
+  $('#cnt').replaceChildren();
+  $('#cnt').append(el('b', '', falta), ' para comprar · ' + feitos + ' de ' + items.length + ' comprados');
+  $('#addf').hidden = bas;
+
+  const opts = bas ? [['todos', 'Todos'], ['pend', 'Pendentes'], ['crit', 'Críticos']] : [['todos', 'Todos'], ['pend', 'Pendentes']];
+  if (!opts.some(o => o[0] === filtro)) filtro = 'todos';
+  $('#chips').replaceChildren(...opts.map(([k, t]) => {
+    const b = el('button', filtro === k ? 'on' : '', t); b.onclick = () => { filtro = k; render(); }; return b;
+  }));
+
+  const vis = items.filter(i => filtro === 'todos' || (filtro === 'pend' && !i.comprado) || (filtro === 'crit' && crit(i)));
+  const ul = $('#list'); ul.replaceChildren();
+  if (!vis.length) { ul.append(el('div', 'empty', items.length ? 'Nada neste filtro.' : 'Lista vazia. Adicione itens na planilha' + (bas ? '.' : ' ou aqui embaixo.'))); return; }
+  vis.forEach(i => {
+    const li = el('li', i.comprado ? 'done' : '');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = i.comprado;
+    cb.setAttribute('aria-label', 'Comprado: ' + i.nome);
+    cb.onchange = () => setF(i, 'comprado', bas ? 'basico_comprado' : 'esp_comprado', cb.checked);
+    const nm = el('div', 'nm', i.nome);
+    if (bas && i.situacao) nm.append(el('small', crit(i) ? 'crit' : '', i.situacao + ' · estoque ' + (i.estoque === '' ? 0 : i.estoque)));
+    li.append(cb, nm, bas ? launcher(i) : stepper(i, 'qtd', 'esp_qtd', 1));
+    ul.append(li);
+  });
+}
+
+function openCfg() { $('#u').value = URL_; $('#k').value = TOK; $('#dlg').showModal(); }
+$('#cfgf').onsubmit = () => { URL_ = $('#u').value.trim(); TOK = $('#k').value.trim(); put('lc_url', URL_); put('lc_tok', TOK); setTimeout(load, 0); };
+$('#cf').onclick = openCfg;
+$('#rf').onclick = () => { status('Atualizando…'); load(); };
+$('#t-basicos').onclick = () => { tab = 'basicos'; $('#t-basicos').className = 'on'; $('#t-esp').className = ''; render(); };
+$('#t-esp').onclick = () => { tab = 'esp'; $('#t-esp').className = 'on'; $('#t-basicos').className = ''; render(); };
+$('#addf').onsubmit = ev => {
+  ev.preventDefault();
+  const nome = $('#addn').value.trim(); if (!nome) return;
+  data.esp.push({ row: 0, nome, qtd: 1, comprado: false }); $('#addn').value = ''; render();
+  send({ acao: 'add', nome, qtd: 1 });
+};
+load();
+setInterval(load, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>
