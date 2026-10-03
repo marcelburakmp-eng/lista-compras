@@ -47,6 +47,17 @@ dialog label{display:block;margin:12px 0 4px;font-size:.9rem;color:var(--mut)}
 dialog input{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.nav{display:flex;gap:4px;background:var(--line);padding:4px;border-radius:999px;margin:16px 0 0}
+.nav button{flex:1;font:inherit;border:0;background:none;color:var(--ink);padding:10px;border-radius:999px;min-height:44px;cursor:pointer}
+.nav button.on{background:var(--card);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);min-height:44px;width:100%;margin:14px 0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.tile small{color:var(--mut);display:block;font-size:.8rem}.tile b{font-size:1.15rem}
+details{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-top:10px}
+summary{display:flex;justify-content:space-between;gap:8px;padding:12px;cursor:pointer;font-weight:600;min-height:44px}
+.ln{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-top:1px solid var(--line);font-size:.95rem}
+.ln span:first-child{min-width:0;overflow-wrap:anywhere}.ln small{color:var(--mut)}.neg{color:var(--crit)}
 </style>
 </head>
 <body>
@@ -61,6 +72,13 @@ dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
       <button class="ic" id="cf" title="Configurar conexão" aria-label="Configurar conexão">⚙</button>
     </div>
   </header>
+  <div class="nav"><button id="n-compras" class="on">Compras</button><button id="n-fin">Financeiro</button></div>
+  <section id="v-fin" hidden>
+    <select id="mes" aria-label="Mês"></select>
+    <div class="tiles" id="tiles"></div>
+    <div id="blocos"></div>
+  </section>
+  <section id="v-compras">
   <div class="prog"><i id="bar"></i></div>
   <div class="cnt" id="cnt"></div>
   <div class="tabs" role="tablist">
@@ -73,6 +91,7 @@ dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
     <input id="addn" placeholder="Novo item esporádico" maxlength="80" required>
     <button>Adicionar</button>
   </form>
+  </section>
 </main>
 
 <dialog id="dlg">
@@ -99,14 +118,15 @@ const crit = i => /cr[ií]tico/i.test(i.situacao || '');
 
 async function load() {
   if (!URL_ || !TOK) return openCfg();
+  if (view === 'fin') return loadFin();
   if (pend) return;
   try {
-    const r = await fetch(URL_ + '?token=' + encodeURIComponent(TOK));
+    const r = await fetch(URL_ + '?token=' + encodeURIComponent(TOK), { signal: AbortSignal.timeout(20000) });
     const j = await r.json();
     if (j.error) throw new Error(j.error === 'token' ? 'código de acesso incorreto' : j.error);
     data = j; render();
     status('Sincronizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-  } catch (e) { status('Sem conexão com a planilha: ' + e.message, true); }
+  } catch (e) { status('Sem conexão com a planilha: ' + (e.name === 'TimeoutError' ? 'demorou demais para responder' : e.message), true); }
 }
 
 async function send(p) {
@@ -178,6 +198,43 @@ function render() {
   });
 }
 
+let view = get('lc_view') || 'compras', mesSel = get('lc_mes');
+const num = s => { s = String(s || '').replace(/[R$\s]/g, ''); if (!s) return 0; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s) || 0; };
+const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function setView(v) {
+  view = v; put('lc_view', v);
+  $('#v-compras').hidden = v !== 'compras'; $('#v-fin').hidden = v !== 'fin';
+  $('#n-compras').className = v === 'compras' ? 'on' : ''; $('#n-fin').className = v === 'fin' ? 'on' : '';
+  load();
+}
+async function loadFin() {
+  try {
+    const q = '?token=' + encodeURIComponent(TOK) + '&acao=fin' + (mesSel ? '&mes=' + encodeURIComponent(mesSel) : '');
+    const j = await (await fetch(URL_ + q, { signal: AbortSignal.timeout(20000) })).json();
+    if (j.error) throw new Error(j.error === 'token' ? 'código de acesso incorreto' : j.error);
+    mesSel = j.mes; put('lc_mes', mesSel); renderFin(j);
+    status('Sincronizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+  } catch (e) { status('Sem conexão com a planilha: ' + (e.name === 'TimeoutError' ? 'demorou demais para responder' : e.message), true); }
+}
+function renderFin(j) {
+  const sel = $('#mes'); sel.replaceChildren(...j.meses.map(m => { const o = el('option', '', m); o.value = m; o.selected = m === j.mes; return o; }));
+  $('#tiles').replaceChildren(...Object.entries(j.resumo).map(([k, v]) => { const t = el('div', 'tile'); t.append(el('small', '', k), el('b', num(v) < 0 ? 'neg' : '', v || '—')); return t; }));
+  $('#blocos').replaceChildren(...j.blocos.map(b => {
+    const d = document.createElement('details'), sm = el('summary'), vals = b.itens.map(i => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra)));
+    sm.append(el('span', '', b.nome + ' (' + b.itens.length + ')'), el('span', '', brl(vals.reduce((a, x) => a + x, 0))));
+    d.append(sm);
+    b.itens.forEach((i, k) => {
+      const ln = el('div', 'ln'), n = el('span', '', i.desc);
+      if (b.tipo === 'cartao' && num(i.parcelas) > 1) n.append(el('small', '', ' · ' + i.parcelas + 'x'));
+      ln.append(n, el('span', vals[k] < 0 ? 'neg' : '', brl(vals[k]))); d.append(ln);
+    });
+    if (!b.itens.length) d.append(el('div', 'ln', 'Sem lançamentos'));
+    return d;
+  }));
+}
+$('#mes').onchange = e => { mesSel = e.target.value; loadFin(); };
+$('#n-compras').onclick = () => setView('compras'); $('#n-fin').onclick = () => setView('fin');
+
 function openCfg() { $('#u').value = URL_; $('#k').value = TOK; $('#dlg').showModal(); }
 $('#cfgf').onsubmit = () => { URL_ = $('#u').value.trim(); TOK = $('#k').value.trim(); put('lc_url', URL_); put('lc_tok', TOK); setTimeout(load, 0); };
 $('#cf').onclick = openCfg;
@@ -190,7 +247,7 @@ $('#addf').onsubmit = ev => {
   data.esp.push({ row: 0, nome, qtd: 1, comprado: false }); $('#addn').value = ''; render();
   send({ acao: 'add', nome, qtd: 1 });
 };
-load();
+setView(view);
 setInterval(load, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 </script>
