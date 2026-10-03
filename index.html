@@ -221,17 +221,18 @@ function renderFin(j) {
   const sel = $('#mes'); sel.replaceChildren(...j.meses.map(m => { const o = el('option', '', m); o.value = m; o.selected = m === j.mes; return o; }));
   const bl = j.blocos.filter(b => !/^inter$/i.test(b.nome.trim()));
   const val = (b, i) => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra));
-  const totB = b => b.tipo === 'cartao' && b.total ? num(b.total) : b.itens.reduce((x, i) => x + val(b, i), 0);
+  const totB = b => b.total ? num(b.total) : b.itens.reduce((x, i) => x + val(b, i), 0);
   const cart = bl.filter(b => b.tipo === 'cartao').reduce((a, b) => a + totB(b), 0);
   const cx = bl.filter(b => b.tipo === 'caixa').flatMap(b => b.itens.map(i => [i.desc, num(i.valor)]));
   const mamis = cx.filter(([d]) => /mamis\s*parcial/i.test(d)).reduce((a, [, v]) => a + v, 0);
   const saidas = cx.filter(([, v]) => v < 0).reduce((a, [, v]) => a + Math.abs(v), 0);
-  const geral = cart + saidas - mamis, pode = LIMITE - (cart - mamis);
+  const caixaTot = bl.filter(b => b.tipo === 'caixa').reduce((a, b) => a + totB(b), 0);
+  const geral = cart + saidas - mamis, pode = LIMITE - ((cart - mamis) - mamis + caixaTot);
   const tile = (k, v, nota) => { const t = el('div', 'tile'); t.append(el('small', '', k), el('b', v < 0 ? 'neg' : '', typeof v === 'number' ? brl(v) : v)); if (nota) t.append(el('small', '', nota)); return t; };
   $('#tiles').replaceChildren(
     tile('Total Gasto - Cartões', cart, 'soma dos totais dos cartões'),
     tile('Total Gasto - Geral', geral, 'cartões + saídas do caixa − Mamis parcial'),
-    tile('Pode Gastar', pode, 'limite ' + brl(LIMITE) + ' − (cartões − Mamis parcial)'));
+    tile('Pode Gastar', pode, 'limite ' + brl(LIMITE) + ' − [(cartões − Mamis) − Mamis + total do caixa]'));
   $('#blocos').replaceChildren(...bl.map(b => {
     const d = document.createElement('details'), sm = el('summary'), vals = b.itens.map(i => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra)));
     sm.append(el('span', '', b.nome + ' (' + b.itens.length + ')'), el('span', '', brl(totB(b))));
