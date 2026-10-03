@@ -198,6 +198,7 @@ function render() {
   });
 }
 
+const LIMITE = 2500; // gasto mensal particular
 let view = get('lc_view') || 'compras', mesSel = get('lc_mes');
 const num = s => { s = String(s || '').replace(/[R$\s]/g, ''); if (!s) return 0; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s) || 0; };
 const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -218,8 +219,20 @@ async function loadFin() {
 }
 function renderFin(j) {
   const sel = $('#mes'); sel.replaceChildren(...j.meses.map(m => { const o = el('option', '', m); o.value = m; o.selected = m === j.mes; return o; }));
-  $('#tiles').replaceChildren(...Object.entries(j.resumo).map(([k, v]) => { const t = el('div', 'tile'); t.append(el('small', '', k), el('b', num(v) < 0 ? 'neg' : '', v || '—')); return t; }));
-  $('#blocos').replaceChildren(...j.blocos.filter(b => !/^inter$/i.test(b.nome.trim())).map(b => {
+  const bl = j.blocos.filter(b => !/^inter$/i.test(b.nome.trim()));
+  const val = (b, i) => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra));
+  const cart = bl.filter(b => b.tipo === 'cartao').reduce((a, b) => a + b.itens.reduce((x, i) => x + val(b, i), 0), 0);
+  const cx = bl.filter(b => b.tipo === 'caixa').flatMap(b => b.itens.map(i => [i.desc, num(i.valor)]));
+  const mamis = cx.filter(([d]) => /mamis\s*parcial/i.test(d)).reduce((a, [, v]) => a + v, 0);
+  const saidas = cx.filter(([, v]) => v < 0).reduce((a, [, v]) => a + Math.abs(v), 0);
+  const geral = cart + saidas - mamis, pode = LIMITE - (cart - mamis);
+  const tile = (k, v, nota) => { const t = el('div', 'tile'); t.append(el('small', '', k), el('b', v < 0 ? 'neg' : '', typeof v === 'number' ? brl(v) : v)); if (nota) t.append(el('small', '', nota)); return t; };
+  $('#tiles').replaceChildren(
+    tile('Total Gasto - Cartões', cart),
+    tile('Total Gasto - Geral', geral, 'cartões + saídas do caixa − Mamis parcial'),
+    tile('Pode Gastar', pode, 'limite ' + brl(LIMITE) + ' − (cartões − Mamis parcial)'),
+    tile('Saldo Anterior', j.resumo['Saldo Anterior'] || '—'));
+  $('#blocos').replaceChildren(...bl.map(b => {
     const d = document.createElement('details'), sm = el('summary'), vals = b.itens.map(i => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra)));
     sm.append(el('span', '', b.nome + ' (' + b.itens.length + ')'), el('span', '', brl(vals.reduce((a, x) => a + x, 0))));
     d.append(sm);
