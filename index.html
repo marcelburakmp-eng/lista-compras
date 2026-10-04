@@ -112,7 +112,7 @@ dialog .row{gap:8px}
     <div id="blocos"></div>
   </section>
   <section id="v-compras">
-  <div class="sum"><div class="cnt" id="cnt"></div><div class="prog"><i id="bar"></i></div></div>
+  <div class="sum"><div class="cnt" id="cnt"></div></div>
   <div class="tabs" role="tablist">
     <button id="t-basicos" class="on">Básicos</button>
     <button id="t-esp">Esporádicos</button>
@@ -231,10 +231,9 @@ function launcher(i) {
 function render() {
   const bas = tab === 'basicos', items = bas ? data.basicos : data.esp;
   const feitos = items.filter(i => i.comprado).length;
-  $('#bar').style.width = items.length ? (feitos / items.length * 100) + '%' : '0';
   const falta = items.length - feitos;
   $('#cnt').replaceChildren();
-  $('#cnt').append(el('b', '', falta), ' para comprar · ' + feitos + ' de ' + items.length + ' comprados');
+  $('#cnt').append(el('b', '', falta), ' para comprar');
   $('#addf').hidden = bas;
 
   const opts = bas ? [['todos', 'Todos'], ['pend', 'Pendentes'], ['crit', 'Críticos']] : [['todos', 'Todos'], ['pend', 'Pendentes']];
