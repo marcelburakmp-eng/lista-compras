@@ -89,6 +89,8 @@ dialog .row{gap:8px}
 .seg input:focus-visible+span{outline:3px solid var(--acc)}
 .sw{display:flex!important;align-items:center;gap:10px;color:var(--ink)!important;font-size:1rem!important;margin-top:14px!important}
 .hint{font-size:.8rem;color:var(--mut);margin-top:10px;min-height:1.2em}
+.sel2{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-bottom:12px}
+.sel2 select{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -104,7 +106,7 @@ dialog .row{gap:8px}
     </div>
   </header>
     <section id="v-fin" hidden>
-    <select id="mes" aria-label="Mês"></select>
+    <div class="sel2"><select id="ano" aria-label="Ano"></select><select id="mes" aria-label="Mês"></select></div>
     <button class="cta" id="nl">＋ Novo lançamento</button>
     <div class="tiles" id="tiles"></div>
     <div id="blocos"></div>
@@ -258,7 +260,7 @@ function render() {
 
 const openB = new Set();
 const LIMITE = 2500; // gasto mensal particular
-let view = get('lc_view') || 'compras', mesSel = get('lc_mes');
+let view = get('lc_view') || 'compras', mesSel = ''; // sempre abre no mês atual (o script escolhe)
 const num = s => { s = String(s || '').replace(/[R$\s]/g, ''); if (!s) return 0; if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s) || 0; };
 const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 function setView(v) {
@@ -272,13 +274,18 @@ async function loadFin() {
     const q = '?token=' + encodeURIComponent(TOK) + '&acao=fin' + (mesSel ? '&mes=' + encodeURIComponent(mesSel) : '');
     const j = await (await fetch(URL_ + q, { signal: AbortSignal.timeout(20000) })).json();
     if (j.error) throw new Error(j.error === 'token' ? 'código de acesso incorreto' : j.error);
-    mesSel = j.mes; put('lc_mes', mesSel);
+    mesSel = j.mes;
     if (JSON.stringify(j) !== lastFin) { lastFin = JSON.stringify(j); renderFin(j); }
     status('Sincronizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
   } catch (e) { status('Sem conexão com a planilha: ' + (e.name === 'TimeoutError' ? 'demorou demais para responder' : e.message), true); }
 }
 function renderFin(j) {
-  const sel = $('#mes'); sel.replaceChildren(...j.meses.map(m => { const o = el('option', '', m); o.value = m; o.selected = m === j.mes; return o; }));
+  finMeses = j.meses;
+  const [mAtual, aAtual] = j.mes.split('/');
+  const anos = [...new Set(j.meses.map(m => m.split('/')[1]))].sort();
+  const opt = (v, t, sel) => { const o = el('option', '', t); o.value = v; o.selected = sel; return o; };
+  $('#ano').replaceChildren(...anos.map(a => opt(a, '20' + a, a === aAtual)));
+  $('#mes').replaceChildren(...mesesDe(aAtual).map(m => opt(m, m, m === mAtual)));
   const bl = j.blocos.filter(b => !/^inter$/i.test(b.nome.trim()));
   const val = (b, i) => b.tipo === 'caixa' ? num(i.valor) : (i.parcela ? num(i.parcela) : num(i.compra));
   const totB = b => b.total ? num(b.total) : b.itens.reduce((x, i) => x + val(b, i), 0);
@@ -313,7 +320,14 @@ function renderFin(j) {
     return d;
   }));
 }
-$('#mes').onchange = e => { mesSel = e.target.value; loadFin(); };
+let finMeses = [];
+const MES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const mesesDe = a => finMeses.filter(m => m.endsWith('/' + a)).map(m => m.split('/')[0]).sort((x, y) => MES.indexOf(x) - MES.indexOf(y));
+$('#ano').onchange = e => {
+  const a = e.target.value, ms = mesesDe(a), cur = (mesSel || '').split('/')[0];
+  mesSel = (ms.includes(cur) ? cur : ms[ms.length - 1]) + '/' + a; loadFin();
+};
+$('#mes').onchange = e => { mesSel = e.target.value + '/' + $('#ano').value; loadFin(); };
 $('#n-compras').onclick = () => setView('compras'); $('#n-fin').onclick = () => setView('fin');
 
 const conta = () => document.querySelector('input[name=conta]:checked').value;
